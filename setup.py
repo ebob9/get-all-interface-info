@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='cloudgenix_get_all_interface_info',
-      version='1.1.0',
+      version='1.1.1',
       description='Utility to dump all CloudGenix App Fabric Interface configurations to a CSV.',
       url='https://github.com/ebob9/get-all-interface-info',
       author='Aaron Edwards',
