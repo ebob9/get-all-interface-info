@@ -59,6 +59,7 @@ def siteid_to_name_dict(session):
         id = site.get('id')
 
         if name and id:
+            name = name.replace(",", " ")
             xlate_dict[id] = name
 
         if id:
@@ -97,6 +98,7 @@ def elements_to_name_dict(session):
         site = element.get('site_id', None)
 
         if name and id:
+            name = name.replace(",", " ")
             name_xlate_dict[id] = name
 
         if site and id:
