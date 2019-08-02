@@ -40,5 +40,6 @@ mb-pro:get-all-interface-info aaron$
 #### Version
 Version | Changes
 ------- | --------
+**1.1.1**| Minor edits to support commas in Site & Element names. Added AUTH TOKEN support.
 **1.1.0**| `pip install cloudgenix_get_all_interface_info` support, python3 support
 **1.0.0**| Initial Release.
