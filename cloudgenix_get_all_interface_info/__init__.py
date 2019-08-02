@@ -29,6 +29,32 @@ SCRIPT_NAME = 'CloudGenix Site Interface info -> CSV Generator'
 # Set NON-SYSLOG logging to use function name
 logger = logging.getLogger(__name__)
 
+####################################################################
+# Read cloudgenix_settings file for auth token or username/password
+####################################################################
+
+sys.path.append(os.getcwd())
+try:
+    from cloudgenix_settings import CLOUDGENIX_AUTH_TOKEN
+
+except ImportError:
+    # Get AUTH_TOKEN/X_AUTH_TOKEN from env variable, if it exists. X_AUTH_TOKEN takes priority.
+    if "X_AUTH_TOKEN" in os.environ:
+        CLOUDGENIX_AUTH_TOKEN = os.environ.get('X_AUTH_TOKEN')
+    elif "AUTH_TOKEN" in os.environ:
+        CLOUDGENIX_AUTH_TOKEN = os.environ.get('AUTH_TOKEN')
+    else:
+        # not set
+        CLOUDGENIX_AUTH_TOKEN = None
+
+try:
+    from cloudgenix_settings import CLOUDGENIX_USER, CLOUDGENIX_PASSWORD
+
+except ImportError:
+    # will get caught below
+    CLOUDGENIX_USER = None
+    CLOUDGENIX_PASSWORD = None
+
 
 def siteid_to_name_dict(session):
     """
@@ -521,10 +547,38 @@ def go():
 
     print("{0} v{1} ({2})\n".format(SCRIPT_NAME, SCRIPT_VERSION, cgx_session.controller))
 
-    # interactive or cmd-line specified initial login
+    # login logic. Use cmdline if set, use AUTH_TOKEN next, finally user/pass from config file, then prompt.
+    # figure out user
+    if args["email"]:
+        user_email = args["email"]
+    elif CLOUDGENIX_USER:
+        user_email = CLOUDGENIX_USER
+    else:
+        user_email = None
 
-    while cgx_session.tenant_name is None:
-        cgx_session.interactive.login(args["email"], args["pass"])
+    # figure out password
+    if args["pass"]:
+        user_password = args["pass"]
+    elif CLOUDGENIX_PASSWORD:
+        user_password = CLOUDGENIX_PASSWORD
+    else:
+        user_password = None
+
+    # check for token
+    if CLOUDGENIX_AUTH_TOKEN and not args["email"] and not args["pass"]:
+        cgx_session.interactive.use_token(CLOUDGENIX_AUTH_TOKEN)
+        if cgx_session.tenant_id is None:
+            print("AUTH_TOKEN login failure, please check token.")
+            sys.exit()
+
+    else:
+        while cgx_session.tenant_id is None:
+            cgx_session.interactive.login(user_email, user_password)
+            # clear after one failed login, force relogin.
+            if not cgx_session.tenant_id:
+                user_email = None
+                user_password = None
+
 
     ############################################################################
     # End Login handling, begin script..
