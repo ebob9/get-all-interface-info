@@ -85,7 +85,6 @@ def siteid_to_name_dict(session):
         id = site.get('id')
 
         if name and id:
-            name = name.replace(",", " ")
             xlate_dict[id] = name
 
         if id:
@@ -124,7 +123,6 @@ def elements_to_name_dict(session):
         site = element.get('site_id', None)
 
         if name and id:
-            name = name.replace(",", " ")
             name_xlate_dict[id] = name
 
         if site and id:
@@ -396,7 +394,7 @@ def write_to_csv(csv_file_name, site_name="", site_type="", site_admin_state="",
                  nat_port=0, operational_state="", operational_speed="", operational_duplex="", operational_link="",
                  operational_device=""):
     # global variable write.
-    write_str = '{0},{1},{2},{3},="{4}",{5},{6},{7},{8},{9},' \
+    write_str = '"{0}",{1},{2},"{3}",="{4}",{5},{6},{7},{8},{9},' \
                 '{10},{11},{12},="{13}",{14},{15},{16},{17},' \
                 '{18},{19},{20},{21},{22},{23},{24},{25},' \
                 '{26},{27},{28},{29},{30},{31}\n' \
