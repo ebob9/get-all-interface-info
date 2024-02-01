@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-CGNX Get all interface info for all sites.
+Prisma SASE  Get all interface info for all sites.
 Python v2.7+.x only, not python3 compatible yet.
 
 cloudgenix@ebob9.com
@@ -14,8 +14,8 @@ import datetime
 import os
 import sys
 
-# CloudGenix SDK
-import cloudgenix
+# Palo Alto Prisma SASE SDK
+import prisma_sase
 
 # bar
 from progressbar import Bar, ETA, Percentage, ProgressBar
@@ -23,43 +23,39 @@ from progressbar import Bar, ETA, Percentage, ProgressBar
 # Global Vars
 TIME_BETWEEN_API_UPDATES = 60  # seconds
 REFRESH_LOGIN_TOKEN_INTERVAL = 7  # hours
-SCRIPT_VERSION = cloudgenix.version
-SCRIPT_NAME = 'CloudGenix Site Interface info -> CSV Generator'
+SCRIPT_VERSION = prisma_sase.version
+SCRIPT_NAME = 'Prisma SD-WAN Site Interface info -> CSV Generator'
 
 # Set NON-SYSLOG logging to use function name
 logger = logging.getLogger(__name__)
 
 ####################################################################
-# Read cloudgenix_settings file for auth token or username/password
+# Read prisma_sase_settings file for auth token or username/password
 ####################################################################
 
-sys.path.append(os.getcwd())
+sys.path.append(".")
 try:
-    from cloudgenix_settings import CLOUDGENIX_AUTH_TOKEN
+    from prisma_sase_settings import PRISMA_SASE_CLIENT_ID, PRISMA_SASE_CLIENT_SECRET, PRISMA_SASE_TSG_ID
 
 except ImportError:
-    # Get AUTH_TOKEN/X_AUTH_TOKEN from env variable, if it exists. X_AUTH_TOKEN takes priority.
-    if "X_AUTH_TOKEN" in os.environ:
-        CLOUDGENIX_AUTH_TOKEN = os.environ.get('X_AUTH_TOKEN')
-    elif "AUTH_TOKEN" in os.environ:
-        CLOUDGENIX_AUTH_TOKEN = os.environ.get('AUTH_TOKEN')
-    else:
-        # not set
-        CLOUDGENIX_AUTH_TOKEN = None
+    # Get auth from standard env variables
+    PRISMA_SASE_CLIENT_ID = os.environ.get('PRISMA_SASE_CLIENT_ID')
+    PRISMA_SASE_CLIENT_SECRET = os.environ.get('PRISMA_SASE_CLIENT_SECRET')
+    PRISMA_SASE_TSG_ID = os.environ.get('PRISMA_SASE_TSG_ID')
 
-try:
-    from cloudgenix_settings import CLOUDGENIX_USER, CLOUDGENIX_PASSWORD
-
-except ImportError:
-    # will get caught below
-    CLOUDGENIX_USER = None
-    CLOUDGENIX_PASSWORD = None
+    # if any missing, try less specific env vars
+    if not PRISMA_SASE_CLIENT_ID:
+        PRISMA_SASE_CLIENT_ID = os.environ.get('CLIENT_ID')
+    if not PRISMA_SASE_CLIENT_SECRET:
+        PRISMA_SASE_CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
+    if not PRISMA_SASE_TSG_ID:
+        PRISMA_SASE_TSG_ID = os.environ.get('TSG_ID')
 
 
 def siteid_to_name_dict(session):
     """
     Create a Site ID to name xlation table.
-    :param session: cloudgenix.API() session object
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with siteid key to site name.
     """
     xlate_dict = {}
@@ -82,14 +78,14 @@ def siteid_to_name_dict(session):
     for site in sites_list:
         # print(json.dumps(site, indent=4))
         name = site.get('name')
-        id = site.get('id')
+        site_id = site.get('id')
 
-        if name and id:
-            xlate_dict[id] = name
+        if name and site_id:
+            xlate_dict[site_id] = name
 
-        if id:
-            id_list.append(id)
-            id_info_dict[id] = site
+        if site_id:
+            id_list.append(site_id)
+            id_info_dict[site_id] = site
 
     return xlate_dict, id_list, id_info_dict
 
@@ -97,7 +93,7 @@ def siteid_to_name_dict(session):
 def elements_to_name_dict(session):
     """
     Create a Site ID to name xlation table.
-    :param session: cloudgenix.API() session object
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with siteid key to site name.
     """
     name_xlate_dict = {}
@@ -119,17 +115,17 @@ def elements_to_name_dict(session):
     # build translation dict
     for element in elements_list:
         name = element.get('name')
-        id = element.get('id')
+        element_id = element.get('id')
         site = element.get('site_id', None)
 
-        if name and id:
-            name_xlate_dict[id] = name
+        if name and element_id:
+            name_xlate_dict[element_id] = name
 
-        if site and id:
-            site_xlate_dict[id] = site
+        if site and element_id:
+            site_xlate_dict[element_id] = site
 
-        if id:
-            id_list.append(id)
+        if element_id:
+            id_list.append(element_id)
 
     return name_xlate_dict, site_xlate_dict, id_list
 
@@ -137,7 +133,7 @@ def elements_to_name_dict(session):
 def securityzone_to_name_dict(session):
     """
     Create a Site ID to name xlation table.
-    :param session: cloudgenix.API() session object
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with siteid key to site name.
     """
     name_xlate_dict = {}
@@ -158,13 +154,13 @@ def securityzone_to_name_dict(session):
     # build translation dict
     for securityzone in securityzones_list:
         name = securityzone.get('name')
-        id = securityzone.get('id')
+        securityzone_id = securityzone.get('id')
 
-        if name and id:
-            name_xlate_dict[id] = name
+        if name and securityzone_id:
+            name_xlate_dict[securityzone_id] = name
 
-        if id:
-            id_list.append(id)
+        if securityzone_id:
+            id_list.append(securityzone_id)
 
     return name_xlate_dict, id_list
 
@@ -191,12 +187,12 @@ def interface_query(site_id, element_id, session):
 
     for interface in interfaces_list:
         name = interface.get('name', "")
-        id = interface.get('id', None)
+        interface_id = interface.get('id', None)
 
-        if id:
-            if_id_to_name_return[id] = name
+        if interface_id:
+            if_id_to_name_return[interface_id] = name
             interface_return.append(interface)
-            if_id_data[id] = interface
+            if_id_data[interface_id] = interface
 
     return interface_return, if_id_to_name_return, if_id_data
 
@@ -204,7 +200,7 @@ def interface_query(site_id, element_id, session):
 def wan_network_dicts(session):
     """
     Create a Site ID <-> Name xlation constructs
-    :param session: cloudgenix.API() session object
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with wannetworkid key to wan_network name. wan_network_list, a list of wan_network IDs
     """
     id_xlate_dict = {}
@@ -241,8 +237,8 @@ def wan_network_dicts(session):
 
 def circuit_categories_dicts(session):
     """
-    Create a circuit Catagory ID to name table
-    :param session: cloudgenix.API() session object
+    Create a circuit Category ID to name table
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with wannetworkid key to wan_network name. wan_network_list, a list of wan_network IDs
     """
     id_xlate_dict = {}
@@ -271,7 +267,7 @@ def circuit_categories_dicts(session):
 def network_context_dicts(session):
     """
     Create a network context id to Name table
-    :param session: cloudgenix.API() session object
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with wannetworkid key to wan_network name. wan_network_list, a list of wan_network IDs
     """
     id_xlate_dict = {}
@@ -300,7 +296,7 @@ def network_context_dicts(session):
 def appdefs_to_name_dict(session):
     """
     Create a Site ID to name xlation table.
-    :param session: cloudgenix.API() session object
+    :param session: prisma_sase.API() session object
     :return: xlate_dict, a dict with siteid key to site name.
     """
     xlate_dict = {}
@@ -319,13 +315,13 @@ def appdefs_to_name_dict(session):
     # build translation dict
     for appdef in appdefs_list:
         name = appdef.get('display_name')
-        id = appdef.get('id')
+        appdef_id = appdef.get('id')
 
-        if name and id:
-            xlate_dict[id] = name
+        if name and appdef_id:
+            xlate_dict[appdef_id] = name
 
-        if id:
-            id_list.append(id)
+        if appdef_id:
+            id_list.append(appdef_id)
 
     return xlate_dict, id_list
 
@@ -347,13 +343,13 @@ def policyset_to_name_dict(session):
     # build translation dict
     for policyset in policyset_list:
         name = policyset.get('name')
-        id = policyset.get('id')
+        polyset_id = policyset.get('id')
 
-        if name and id:
-            xlate_dict[id] = name
+        if name and polyset_id:
+            xlate_dict[polyset_id] = name
 
-        if id:
-            id_list.append(id)
+        if polyset_id:
+            id_list.append(polyset_id)
 
     return xlate_dict, id_list
 
@@ -399,71 +395,71 @@ def write_to_csv(csv_file_name, site_name="", site_type="", site_admin_state="",
                 '{18},{19},{20},{21},{22},{23},{24},{25},' \
                 '{26},{27},{28},{29},{30},{31}\n' \
         .format(
-        # Site Name
-        site_name,
-        # Site Type
-        site_type,
-        # Site Mode
-        site_admin_state,
-        # ION name
-        element_name,
-        # Interface name
-        interface_name,
-        # Interface used for
-        intf_used_for,
-        # Network Policy
-        site_policyset_name,
-        # Port Admin State
-        interface_admin_state,
-        # Operational State
-        operational_state,
-        # Speed
-        operational_speed,
-        # Duplex
-        operational_duplex,
-        # Link State
-        operational_link,
-        # MAC Address
-        mac_address,
-        # VLAN
-        vlan,
-        # Address/Mask List
-        interface_str,
-        # Config by
-        if_config_type,
-        # MTU
-        interface_mtu,
-        # Network Context
-        network_context,
-        # Local or Global
-        local_global,
-        # Circuit Name
-        swi_name,
-        # Configured BW Up
-        conf_bw_up,
-        # Configured BW Down
-        conf_bw_down,
-        # PCM
-        pcm_enabled,
-        # LQM
-        lqm_enabled,
-        # QoS
-        qos_enabled,
-        # Circuit Catagory
-        circuit_category,
-        # WAN Network Name
-        wan_network_name,
-        # Security Policy
-        site_security_policyset_name,
-        # Security Zone
-        security_zone,
-        # Configured NAT address
-        "" if not nat_addr else nat_addr,
-        # Configured NAT Port
-        "" if nat_port == 0 else nat_port,
-        # UNIX Device Name
-        operational_device
-    )
+                # Site Name
+                site_name,
+                # Site Type
+                site_type,
+                # Site Mode
+                site_admin_state,
+                # ION name
+                element_name,
+                # Interface name
+                interface_name,
+                # Interface used for
+                intf_used_for,
+                # Network Policy
+                site_policyset_name,
+                # Port Admin State
+                interface_admin_state,
+                # Operational State
+                operational_state,
+                # Speed
+                operational_speed,
+                # Duplex
+                operational_duplex,
+                # Link State
+                operational_link,
+                # MAC Address
+                mac_address,
+                # VLAN
+                vlan,
+                # Address/Mask List
+                interface_str,
+                # Config by
+                if_config_type,
+                # MTU
+                interface_mtu,
+                # Network Context
+                network_context,
+                # Local or Global
+                local_global,
+                # Circuit Name
+                swi_name,
+                # Configured BW Up
+                conf_bw_up,
+                # Configured BW Down
+                conf_bw_down,
+                # PCM
+                pcm_enabled,
+                # LQM
+                lqm_enabled,
+                # QoS
+                qos_enabled,
+                # Circuit Catagory
+                circuit_category,
+                # WAN Network Name
+                wan_network_name,
+                # Security Policy
+                site_security_policyset_name,
+                # Security Zone
+                security_zone,
+                # Configured NAT address
+                "" if not nat_addr else nat_addr,
+                # Configured NAT Port
+                "" if nat_port == 0 else nat_port,
+                # UNIX Device Name
+                operational_device
+            )
 
     with open(csv_file_name, 'a') as csv_file:
         csv_file.write(write_str)
@@ -495,16 +491,18 @@ def go():
     # Allow Controller modification and debug level sets.
     controller_group = parser.add_argument_group('API', 'These options change how this program connects to the API.')
     controller_group.add_argument("--controller", "-C",
-                                  help="Controller URI, ex. https://controller.cloudgenix.com:8443",
+                                  help="Controller URI, ex. https://api.sase.paloaltonetworks.com",
                                   default=None)
 
     controller_group.add_argument("--insecure", "-I", help="Disable SSL certificate and hostname verification",
                                   dest='verify', action='store_false', default=True)
 
     login_group = parser.add_argument_group('Login', 'These options allow skipping of interactive login')
-    login_group.add_argument("--email", "-E", help="Use this email as User Name instead of prompting",
+    login_group.add_argument("--client-id", "-CID", help="Use this Prisma SASE Client ID instead of prompting",
                              default=None)
-    login_group.add_argument("--pass", "-PW", help="Use this Password instead of prompting",
+    login_group.add_argument("--client-secret", "-CS", help="Use this Prisma SASE Client Secret instead of prompting",
+                             default=None)
+    login_group.add_argument("--tsg-id", "-TSG", help="Use this Prisma SASE TSG ID instead of prompting",
                              default=None)
 
     debug_group = parser.add_argument_group('Debug', 'These options enable debugging output')
@@ -534,49 +532,56 @@ def go():
     # Instantiate API
     ############################################################################
 
-    cgx_session = cloudgenix.API(controller=args["controller"], ssl_verify=args["verify"])
+    sase_session = prisma_sase.API(controller=args["controller"], ssl_verify=args["verify"])
+    # sase sdk interactive bug workaround.
+    sase_session.client_secret = None
+    sase_session.tsg_id = None
 
     # set debug
-    cgx_session.set_debug(args["debug"])
+    sase_session.set_debug(args["debug"])
 
     ############################################################################
     # Draw Interactive login banner, run interactive login including args above.
     ############################################################################
 
-    print("{0} v{1} ({2})\n".format(SCRIPT_NAME, SCRIPT_VERSION, cgx_session.controller))
+    print("{0} v{1} ({2})\n".format(SCRIPT_NAME, SCRIPT_VERSION, sase_session.controller))
 
     # login logic. Use cmdline if set, use AUTH_TOKEN next, finally user/pass from config file, then prompt.
-    # figure out user
-    if args["email"]:
-        user_email = args["email"]
-    elif CLOUDGENIX_USER:
-        user_email = CLOUDGENIX_USER
+    # figure out client id
+    if args["client_id"]:
+        client_id = args["client_id"]
+    elif PRISMA_SASE_CLIENT_ID:
+        client_id = PRISMA_SASE_CLIENT_ID
     else:
-        user_email = None
+        client_id = None
 
-    # figure out password
-    if args["pass"]:
-        user_password = args["pass"]
-    elif CLOUDGENIX_PASSWORD:
-        user_password = CLOUDGENIX_PASSWORD
+    # figure out client secret
+    if args["client_secret"]:
+        client_secret = args["client_secret"]
+    elif PRISMA_SASE_CLIENT_SECRET:
+        client_secret = PRISMA_SASE_CLIENT_SECRET
     else:
-        user_password = None
+        client_secret = None
 
-    # check for token
-    if CLOUDGENIX_AUTH_TOKEN and not args["email"] and not args["pass"]:
-        cgx_session.interactive.use_token(CLOUDGENIX_AUTH_TOKEN)
-        if cgx_session.tenant_id is None:
-            print("AUTH_TOKEN login failure, please check token.")
-            sys.exit()
-
+    # figure out TSG ID
+    if args["tsg_id"]:
+        tsg_id = args["tsg_id"]
+    elif PRISMA_SASE_TSG_ID:
+        tsg_id = PRISMA_SASE_TSG_ID
     else:
-        while cgx_session.tenant_id is None:
-            cgx_session.interactive.login(user_email, user_password)
-            # clear after one failed login, force relogin.
-            if not cgx_session.tenant_id:
-                user_email = None
-                user_password = None
+        tsg_id = None
 
+    if not client_id and not client_secret and not tsg_id:
+        # give some helpful info.
+        print(f"Please enter Prisma SASE Service Account (not user account) info to login.")
+
+    while sase_session.tenant_id is None:
+        sase_session.interactive.login_secret(client_id=client_id, client_secret=client_secret, tsg_id=tsg_id)
+        # clear after one failed login, force relogin.
+        if not sase_session.tenant_id:
+            client_id = None
+            client_secret = None
+            tsg_id = None
 
     ############################################################################
     # End Login handling, begin script..
@@ -586,7 +591,7 @@ def go():
     curtime_str = datetime.datetime.utcnow().strftime('%Y-%m-%d-%H-%M-%S')
 
     # create file-system friendly tenant str.
-    tenant_str = "".join(x for x in cgx_session.tenant_name if x.isalnum()).lower()
+    tenant_str = "".join(x for x in sase_session.tenant_name if x.isalnum()).lower()
 
     # Set filenames
     interfaces_csv = os.path.join('./', '%s_interfaces_%s.csv' %
@@ -605,22 +610,22 @@ def go():
 
     # Create xlation dicts and lists.
     print("Caching Sites..")
-    id_site_dict, site_id_list, site_info_dict = siteid_to_name_dict(cgx_session)
+    id_site_dict, site_id_list, site_info_dict = siteid_to_name_dict(sase_session)
     print("Caching Elements..")
-    id_element_dict, element_site_dict, element_id_list = elements_to_name_dict(cgx_session)
+    id_element_dict, element_site_dict, element_id_list = elements_to_name_dict(sase_session)
     print("Caching WAN Networks..")
     id_wannetwork_dict, name_wannetwork_id_dict, wannetwork_id_list, wannetwork_type_dict = wan_network_dicts(
-        cgx_session)
+        sase_session)
     print("Caching Circuit Catagories..")
-    id_circuit_categories = circuit_categories_dicts(cgx_session)
+    id_circuit_categories = circuit_categories_dicts(sase_session)
     print("Caching Network Contexts..")
-    id_network_contexts = network_context_dicts(cgx_session)
+    id_network_contexts = network_context_dicts(sase_session)
     print("Caching Policysets..")
-    id_policyset_dict, policyset_id_list = policyset_to_name_dict(cgx_session)
+    id_policyset_dict, policyset_id_list = policyset_to_name_dict(sase_session)
     print("Caching Security Policysets..")
-    id_securitypolicyset_dict, securitypolicyset_id_list = securitypolicyset_to_name_dict(cgx_session)
+    id_securitypolicyset_dict, securitypolicyset_id_list = securitypolicyset_to_name_dict(sase_session)
     print("Caching Security Zones..")
-    id_securityzone_dict, securityzone_id_list = securityzone_to_name_dict(cgx_session)
+    id_securityzone_dict, securityzone_id_list = securityzone_to_name_dict(sase_session)
 
     # print(json.dumps(id_wannetwork_dict, indent=4))
     # print(json.dumps(id_securitypolicyset_dict, indent=4))
@@ -646,7 +651,7 @@ def go():
             # if it is bound, and bound to this site, add to list.
             if site_in and site_in == site:
                 # Query interfaces
-                interfaces_list, if_id_to_name_item, if_id_data_entry = interface_query(site, element, cgx_session)
+                interfaces_list, if_id_to_name_item, if_id_data_entry = interface_query(site, element, sase_session)
                 # add the element to the list
                 elements.append({
                     'id': element,
@@ -694,7 +699,7 @@ def go():
             site_used_prefixes = []
 
             # query Site WAN Interface info
-            cgx_result = cgx_session.get.waninterfaces(site_id)
+            cgx_result = sase_session.get.waninterfaces(site_id)
             swi_status = cgx_result.cgx_status
             swi_query = cgx_result.cgx_content
             if swi_status:
@@ -704,7 +709,7 @@ def go():
                         swi_id_dict[swi_id] = swi
 
             # query LAN Network info
-            cgx_result = cgx_session.get.lannetworks(site_id)
+            cgx_result = sase_session.get.lannetworks(site_id)
             ln_status = cgx_result.cgx_status
             ln_query = cgx_result.cgx_content
             if ln_status:
@@ -724,7 +729,7 @@ def go():
                             site_all_prefixes += all_ln_ipv4_prefixes
 
             # cache network -> Security Zone binding
-            cgx_result = cgx_session.get.sitesecurityzones(site_id)
+            cgx_result = sase_session.get.sitesecurityzones(site_id)
             securityzone_status = cgx_result.cgx_status
             securityzone_query = cgx_result.cgx_content
             if securityzone_status:
@@ -838,7 +843,7 @@ def go():
                                 used_for = intf_used_for.title()
 
                         # get interface status
-                        cgx_result = cgx_session.get.status_interfaces(site_id, element_id, interface_id)
+                        cgx_result = sase_session.get.status_interfaces(site_id, element_id, interface_id)
                         query_status = cgx_result.cgx_status
                         interface_status = cgx_result.cgx_content
 
@@ -1324,5 +1329,4 @@ def go():
     # finish after iteration.
     pbar.finish()
     # logout
-    cgx_session.interactive.logout()
     sys.exit()

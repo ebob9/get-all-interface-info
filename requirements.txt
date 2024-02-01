@@ -1,2 +1,2 @@
-cloudgenix>=4.5.5b2
-progressbar2>=3.34.3
+prisma-sase >= 6.3.1b1
+progressbar2 >= 3.34.3

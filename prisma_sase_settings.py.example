@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+# Settings for scripts using prisma_sase SDK
+# Uncomment lines below and enter your details to use this as an auth file.
+
+#PRISMA_SASE_CLIENT_ID='enter your client id here'
+#PRISMA_SASE_CLIENT_SECRET='enter your client secret here'
+#PRISMA_SASE_TSG_ID='enter your tsg id here'
