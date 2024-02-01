@@ -10,7 +10,7 @@ Quick script to dump an entire Prisma SD-WAN network/site configuration summary 
   * Service account credentials can be entered interactive, script arguments, environment varibales, or via a `prisma_sase_settings.py` setting file in the current working directory.
 * Python >=3.6
 * Python modules:
-    * prisma-sase >=4.4.5b2 - <https://github.com/PaloAltoNetworks/prisma-sase-sdk-python>
+    * prisma-sase >= 6.3.1b1 - <https://github.com/PaloAltoNetworks/prisma-sase-sdk-python>
     * progressbar2 >=3.34.3 - <https://github.com/WoLpH/python-progressbar>
 
 #### License
